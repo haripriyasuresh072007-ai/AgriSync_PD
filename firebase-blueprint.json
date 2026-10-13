@@ -1,0 +1,55 @@
+{
+  "entities": {
+    "Booking": {
+      "title": "Booking",
+      "description": "Procurement slot booking record for farmer mandi arrivals",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "farmerId": { "type": "string", "maxLength": 64 },
+        "farmerName": { "type": "string", "maxLength": 128 },
+        "phone": { "type": "string", "maxLength": 32 },
+        "commodity": { "type": "string", "maxLength": 64 },
+        "quantityQuintals": { "type": "number" },
+        "vehicleNumber": { "type": "string", "maxLength": 64 },
+        "vehicleType": { "type": "string", "maxLength": 64 },
+        "bookingDate": { "type": "string", "maxLength": 32 },
+        "allocatedSlot": { "type": "string", "maxLength": 64 },
+        "allocatedHour": { "type": "number" },
+        "mandiName": { "type": "string", "maxLength": 128 },
+        "channel": { "type": "string", "maxLength": 32 },
+        "status": { "type": "string", "maxLength": 32 },
+        "tokenNumber": { "type": "number" },
+        "estimatedWaitMinutes": { "type": "number" },
+        "qrPayload": { "type": "string", "maxLength": 1024 },
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "farmerId", "farmerName", "commodity", "allocatedSlot", "status"]
+    },
+    "MandiDailyStat": {
+      "title": "MandiDailyStat",
+      "description": "Daily arrivals and operational metrics for the APMC mandi",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64 },
+        "dayName": { "type": "string", "maxLength": 32 },
+        "arrivalsCount": { "type": "number" },
+        "tonnesProcessed": { "type": "number" },
+        "avgWaitMinutes": { "type": "number" },
+        "date": { "type": "string", "maxLength": 32 }
+      },
+      "required": ["id", "dayName", "arrivalsCount"]
+    }
+  },
+  "firestore": {
+    "/bookings/{bookingId}": {
+      "schema": { "$ref": "#/entities/Booking" },
+      "description": "Individual slot booking and gate entry pass record"
+    },
+    "/mandi_stats/{statId}": {
+      "schema": { "$ref": "#/entities/MandiDailyStat" },
+      "description": "Mandi aggregated operational and daily arrivals data"
+    }
+  }
+}

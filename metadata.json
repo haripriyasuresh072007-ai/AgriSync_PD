@@ -1,0 +1,8 @@
+{
+  "name": "AgriSync - Cloud-Based Farmer Procurement Platform",
+  "description": "Smart digital queue and predictive slot booking platform for farmers and APMC mandi administration.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
