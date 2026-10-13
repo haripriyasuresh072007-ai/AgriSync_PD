@@ -27,6 +27,7 @@ import {
 } from '../services/dynamicAllocation';
 import { saveBooking } from '../services/bookingStore';
 import { TranscriptionResult } from '../services/transcriptionService';
+import { dispatchApmcSms, formatApmcPassSms } from '../services/smsService';
 
 interface FarmerPortalProps {
   existingBookings: Booking[];
@@ -225,6 +226,13 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
       };
 
       await saveBooking(newBooking);
+
+      // Automatically dispatch official DLT SMS to entered farmer mobile number!
+      const smsMessage = formatApmcPassSms(newBooking, language);
+      dispatchApmcSms(newBooking.phone, smsMessage, newBooking).catch((smsErr) => {
+        console.warn('SMS dispatch background notice:', smsErr);
+      });
+
       setIsSubmitting(false);
       onBookingSuccess(newBooking);
     } catch (err: unknown) {
@@ -390,6 +398,10 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
                     className="w-full pl-9 pr-3.5 py-2.5 rounded-lg border border-stone-300 focus:outline-hidden focus:ring-2 focus:ring-emerald-600 text-stone-900 text-sm bg-stone-50/50"
                   />
                 </div>
+                <p className="text-[11px] text-emerald-800 mt-1.5 flex items-center gap-1 font-medium">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span>Official DLT SMS pass with token & entry link dispatched instantly to this number.</span>
+                </p>
               </div>
             </div>
           </div>

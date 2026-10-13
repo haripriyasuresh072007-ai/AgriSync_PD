@@ -199,6 +199,7 @@ export default function App() {
           <DigitalPass
             booking={activePassBooking}
             onOpenGateScanner={() => setIsGateScannerOpen(true)}
+            onOpenSmsSimulator={() => setIsSmsOpen(true)}
             onBookAnother={() => setCurrentTab('farmer')}
             onViewAdmin={() => setCurrentTab('admin')}
           />
@@ -240,6 +241,8 @@ export default function App() {
         isOpen={isSmsOpen}
         onClose={() => setIsSmsOpen(false)}
         existingBookings={bookings}
+        initialPhone={activePassBooking?.phone}
+        initialBooking={activePassBooking}
         onBookingCreated={(newBooking) => {
           setActivePassBooking(newBooking);
           setCurrentTab('pass');

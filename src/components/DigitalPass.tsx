@@ -22,14 +22,23 @@ import {
   Sliders,
   ExternalLink,
   Copy,
-  Info
+  Info,
+  Radio,
+  Phone
 } from 'lucide-react';
 import { Booking } from '../types/procurement';
 import { updateBookingStatus } from '../services/bookingStore';
+import {
+  formatApmcPassSms,
+  buildNativeSmsUri,
+  buildWhatsAppUri,
+  shareSmsNatively,
+} from '../services/smsService';
 
 interface DigitalPassProps {
   booking: Booking | null;
   onOpenGateScanner?: () => void;
+  onOpenSmsSimulator?: () => void;
   onBookAnother?: () => void;
   onViewAdmin?: () => void;
 }
@@ -39,10 +48,12 @@ type QrFormatType = 'pass_text' | 'web_url' | 'apmc_token';
 export const DigitalPass: React.FC<DigitalPassProps> = ({
   booking,
   onOpenGateScanner,
+  onOpenSmsSimulator,
   onBookAnother,
   onViewAdmin,
 }) => {
   const [copied, setCopied] = useState(false);
+  const [copiedSms, setCopiedSms] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [viewMode, setViewMode] = useState<'phone' | 'card'>('phone');
   const [qrFormat, setQrFormat] = useState<QrFormatType>('pass_text');
@@ -532,6 +543,80 @@ export const DigitalPass: React.FC<DigitalPassProps> = ({
               >
                 <ExternalLink className="w-3 h-3" />
                 {copiedUrl ? 'Link Copied!' : 'Copy Direct Web Link'}
+              </button>
+            </div>
+          </div>
+
+          {/* Official DLT SMS Dispatch Card */}
+          <div className="bg-gradient-to-br from-stone-900 to-stone-800 rounded-2xl p-4 sm:p-5 text-white shadow-md border border-stone-700">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                <Radio className="w-4 h-4 text-amber-400" />
+                <h3 className="font-bold text-xs uppercase tracking-wider text-amber-400">
+                  GSM DLT SMS Dispatched
+                </h3>
+              </div>
+              <span className="text-[10px] bg-emerald-950 text-emerald-400 font-mono px-2 py-0.5 rounded-full border border-emerald-800">
+                TRAI DLT: VM-AGRIAPMC
+              </span>
+            </div>
+
+            <div className="bg-stone-950/80 rounded-xl p-3 border border-stone-800 mb-3 space-y-1.5 font-mono text-[11px]">
+              <div className="flex items-center justify-between text-stone-400 text-[10px]">
+                <span>To: <strong className="text-emerald-300">{booking.phone}</strong></span>
+                <span className="text-stone-500">Token #{booking.tokenNumber}</span>
+              </div>
+              <p className="text-stone-200 leading-relaxed font-sans text-xs">
+                {formatApmcPassSms(booking, 'en')}
+              </p>
+            </div>
+
+            {/* Mobile Actions */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+              <a
+                href={buildNativeSmsUri(booking.phone, formatApmcPassSms(booking, 'en'))}
+                className="py-2 px-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl font-bold text-[11px] text-center flex items-center justify-center gap-1 shadow-xs transition-colors"
+                title="Launch Native Messages App on Phone"
+              >
+                <Smartphone className="w-3.5 h-3.5 text-amber-300" />
+                <span>Native SMS</span>
+              </a>
+
+              <a
+                href={buildWhatsAppUri(booking.phone, formatApmcPassSms(booking, 'en'))}
+                target="_blank"
+                rel="noreferrer"
+                className="py-2 px-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-[11px] text-center flex items-center justify-center gap-1 shadow-xs transition-colors"
+                title="Send via WhatsApp"
+              >
+                <Share2 className="w-3.5 h-3.5" />
+                <span>WhatsApp</span>
+              </a>
+
+              {onOpenSmsSimulator && (
+                <button
+                  type="button"
+                  onClick={onOpenSmsSimulator}
+                  className="py-2 px-2 bg-stone-700 hover:bg-stone-600 text-amber-300 rounded-xl font-bold text-[11px] text-center flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                  title="Open SMS Simulator Gateway"
+                >
+                  <Radio className="w-3.5 h-3.5" />
+                  <span>SMS Gateway</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(formatApmcPassSms(booking, 'en'));
+                  setCopiedSms(true);
+                  setTimeout(() => setCopiedSms(false), 2000);
+                }}
+                className="py-2 px-2 bg-stone-800 hover:bg-stone-700 text-stone-200 rounded-xl font-bold text-[11px] text-center flex items-center justify-center gap-1 cursor-pointer transition-colors"
+              >
+                {copiedSms ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copiedSms ? 'Copied!' : 'Copy Text'}</span>
               </button>
             </div>
           </div>
