@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Wheat,
   Calendar,
@@ -14,7 +14,8 @@ import {
   TrendingDown,
   Building2,
   ArrowRight,
-  ShieldAlert
+  ShieldAlert,
+  Mic,
 } from 'lucide-react';
 import { Booking } from '../types/procurement';
 import {
@@ -25,18 +26,101 @@ import {
   DEFAULT_COMMODITY_MSP,
 } from '../services/dynamicAllocation';
 import { saveBooking } from '../services/bookingStore';
+import { TranscriptionResult } from '../services/transcriptionService';
 
 interface FarmerPortalProps {
   existingBookings: Booking[];
   onBookingSuccess: (booking: Booking) => void;
-  language: 'en' | 'hi' | 'pa';
+  language: 'en' | 'hi' | 'pa' | 'ta';
+  onOpenTranscriber?: () => void;
+  voiceAutofillFields?: TranscriptionResult['parsedFields'] | null;
 }
 
 export const FarmerPortal: React.FC<FarmerPortalProps> = ({
   existingBookings,
   onBookingSuccess,
   language,
+  onOpenTranscriber,
+  voiceAutofillFields,
 }) => {
+  const t = {
+    en: {
+      portalBadge: "Farmer Procurement Portal",
+      title: "Book Digital Procurement Slot",
+      subtitle: "Eliminate endless gate lines. Our predictive scheduling matches your arrival with real-time mandi weighing capacity to guarantee a 15-minute gate turnaround.",
+      sec1: "1. Farmer Identification & Contact",
+      farmerName: "Farmer Full Name *",
+      farmerId: "Farmer ID / Kisan Card *",
+      mobile: "Mobile Number (SMS Updates) *",
+      sec2: "2. Crop Commodity & Yield Details",
+      selectCrop: "Select Commodity *",
+      qty: "Estimated Quantity (Quintals) *",
+      sec3: "3. Transport & Vehicle Details",
+      vehicleType: "Vehicle Type",
+      plate: "Vehicle Number Plate",
+      sec4: "4. Predictive Slot Allocation Engine",
+      procDate: "Procurement Date",
+      schedMode: "Scheduling Mode",
+      submitBtn: "Confirm Booking & Generate Gate Pass",
+    },
+    hi: {
+      portalBadge: "किसान खरीद पोर्टल",
+      title: "डिजिटल खरीद स्लॉट बुक करें",
+      subtitle: "मंडी में लंबी कतारों से मुक्ति। हमारी भविष्यवाणी शेड्यूलिंग 15 मिनट में सुरक्षित प्रवेश सुनिश्चित करती है।",
+      sec1: "1. किसान पहचान एवं संपर्क",
+      farmerName: "किसान का पूरा नाम *",
+      farmerId: "किसान आईडी / कार्ड *",
+      mobile: "मोबाइल नंबर *",
+      sec2: "2. फसल एवं उपज विवरण",
+      selectCrop: "फसल चुनें *",
+      qty: "अनुमानित मात्रा (क्विंटल) *",
+      sec3: "3. वाहन विवरण",
+      vehicleType: "वाहन प्रकार",
+      plate: "वाहन नंबर प्लेट",
+      sec4: "4. स्मार्ट स्लॉट आवंटन इंजन",
+      procDate: "खरीद तिथि",
+      schedMode: "शेड्यूलिंग मोड",
+      submitBtn: "बुकिंग पुष्टि करें और गेट पास पाएं",
+    },
+    pa: {
+      portalBadge: "ਕਿਸਾਨ ਖਰੀਦ ਪੋਰਟਲ",
+      title: "ਡਿਜੀਟਲ ਖਰੀਦ ਸਲਾਟ ਬੁੱਕ ਕਰੋ",
+      subtitle: "ਲੰਬੀਆਂ ਲਾਈਨਾਂ ਤੋਂ ਛੁਟਕਾਰਾ। ਸਮਾਰਟ ਸ਼ਡਿਊਲਿੰਗ 15 ਮਿੰਟ ਵਿੱਚ ਗੇਟ ਐਂਟਰੀ ਯਕੀਨੀ ਬਣਾਉਂਦੀ ਹੈ।",
+      sec1: "1. ਕਿਸਾਨ ਪਛਾਣ ਅਤੇ ਸੰਪਰਕ",
+      farmerName: "ਕਿਸਾਨ ਦਾ ਪੂਰਾ ਨਾਮ *",
+      farmerId: "ਕਿਸਾਨ ਆਈਡੀ *",
+      mobile: "ਮੋਬਾਈਲ ਨੰਬਰ *",
+      sec2: "2. ਫਸਲ ਅਤੇ ਪੈਦਾਵਾਰ ਵੇਰਵਾ",
+      selectCrop: "ਫਸਲ ਚੁਣੋ *",
+      qty: "ਅਨੁਮਾਨਿਤ ਮਾਤਰਾ (ਕੁਇੰਟਲ) *",
+      sec3: "3. ਵਾਹਨ ਵੇਰਵਾ",
+      vehicleType: "ਵਾਹਨ ਦੀ ਕਿਸਮ",
+      plate: "ਵਾਹਨ ਨੰਬਰ ਪਲੇਟ",
+      sec4: "4. ਸਮਾਰਟ ਸਲਾਟ ਇੰਜਣ",
+      procDate: "ਖਰੀਦ ਦੀ ਮਿਤੀ",
+      schedMode: "ਸ਼ਡਿਊਲਿੰਗ ਮੋਡ",
+      submitBtn: "ਬੁਕਿੰਗ ਦੀ ਪੁਸ਼ਟੀ ਕਰੋ ਅਤੇ ਗੇਟ ਪਾਸ ਪ੍ਰਾਪਤ ਕਰੋ",
+    },
+    ta: {
+      portalBadge: "விவசாயிகள் கொள்முதல் போர்டல்",
+      title: "டிஜிட்டல் கொள்முதல் நேர முன்பதிவு",
+      subtitle: "நீண்ட வரிசைகளைத் தவிர்த்து, உங்கள் விளைச்சலை விரைவாக விநியோகிக்கவும். 15 நிமிடங்களில் நேரடி எடைபோடும் நுழைவு உத்தரவாதம்.",
+      sec1: "1. விவசாயி அடையாளம் மற்றும் தொடர்பு",
+      farmerName: "விவசாயியின் முழு பெயர் *",
+      farmerId: "விவசாயி அடையாள அட்டை (Kisan ID) *",
+      mobile: "கைபேசி எண் (SMS அறிவிப்புகள்) *",
+      sec2: "2. விளைபொருள் மற்றும் மகசூல் விபரம்",
+      selectCrop: "விளைபொருளைத் தேர்ந்தெடுக்கவும் *",
+      qty: "மதிப்பிடப்பட்ட அளவு (குவிண்டால்) *",
+      sec3: "3. போக்குவரத்து மற்றும் வாகன விபரம்",
+      vehicleType: "வாகன வகை",
+      plate: "வாகன பதிவு எண்",
+      sec4: "4. கணிப்பு நேர ஒதுக்கீட்டு அமைப்பு",
+      procDate: "கொள்முதல் தேதி",
+      schedMode: "நேர ஒதுக்கீட்டு முறை",
+      submitBtn: "முன்பதிவை உறுதிசெய்து நுழைவு அட்டை பெறுக",
+    },
+  }[language];
   const todayStr = new Date().toISOString().split('T')[0];
 
   const [farmerName, setFarmerName] = useState('Balwant Singh');
@@ -60,6 +144,17 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
     bookingDate,
     slotPreference
   );
+
+  // Sync voice-transcribed fields when received
+  useEffect(() => {
+    if (voiceAutofillFields) {
+      if (voiceAutofillFields.farmerName) setFarmerName(voiceAutofillFields.farmerName);
+      if (voiceAutofillFields.commodity) setCommodity(voiceAutofillFields.commodity);
+      if (voiceAutofillFields.quantityQuintals) setQuantityQuintals(voiceAutofillFields.quantityQuintals);
+      if (voiceAutofillFields.vehicleNumber) setVehicleNumber(voiceAutofillFields.vehicleNumber);
+      if (voiceAutofillFields.vehicleType) setVehicleType(voiceAutofillFields.vehicleType);
+    }
+  }, [voiceAutofillFields]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -145,7 +240,7 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
       {/* Banner / Value Proposition matching Slide 1 & 7 */}
-      <div className="bg-gradient-to-r from-emerald-800 via-emerald-700 to-amber-700 rounded-2xl p-6 sm:p-8 text-white shadow-xl mb-8 relative overflow-hidden border border-emerald-600/30">
+      <div className="bg-gradient-to-r from-emerald-800 via-emerald-700 to-amber-700 rounded-2xl p-6 sm:p-8 text-white shadow-xl mb-6 relative overflow-hidden border border-emerald-600/30">
         <div className="absolute -right-10 -bottom-10 opacity-10 pointer-events-none">
           <Wheat className="w-64 h-64 text-amber-200" />
         </div>
@@ -153,7 +248,7 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
         <div className="relative z-10">
           <div className="flex flex-wrap items-center gap-2 mb-3">
             <span className="bg-amber-400 text-stone-900 text-xs font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-              Farmer Procurement Portal
+              {t.portalBadge}
             </span>
             <span className="text-emerald-100 text-xs flex items-center gap-1 bg-emerald-900/40 px-2 py-0.5 rounded-full border border-emerald-600/40">
               <Building2 className="w-3.5 h-3.5 text-amber-300" />
@@ -162,10 +257,10 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
           </div>
 
           <h1 className="text-2xl sm:text-3xl font-serif font-bold text-amber-100">
-            Book Digital Procurement Slot
+            {t.title}
           </h1>
           <p className="mt-2 text-emerald-50 text-sm sm:text-base max-w-2xl leading-relaxed">
-            Eliminate endless gate lines. Our predictive scheduling matches your arrival with real-time mandi weighing capacity to guarantee a 15-minute gate turnaround.
+            {t.subtitle}
           </p>
 
           {/* Quick value cards */}
@@ -189,6 +284,38 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
         </div>
       </div>
 
+      {/* Voice Transcribe Banner (gemini-3.5-transcribe) */}
+      <div className="mb-6 p-4 rounded-2xl bg-gradient-to-r from-emerald-50 via-white to-amber-50 border border-emerald-300 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-emerald-700 text-amber-300 flex items-center justify-center shadow-md shrink-0">
+            <Mic className="w-5 h-5 animate-pulse" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-bold text-sm text-stone-900 font-serif">
+                Kisan Vani — Voice Booking & Audio Transcription
+              </span>
+              <span className="text-[10px] font-mono font-bold bg-amber-400 text-stone-900 px-2 py-0.5 rounded-full shadow-xs">
+                gemini-3.5-transcribe
+              </span>
+            </div>
+            <p className="text-xs text-stone-500 mt-0.5">
+              Speak into your microphone in English, हिंदी, தமிழ், or ਪੰਜਾਬੀ to transcribe audio and auto-fill your slot.
+            </p>
+          </div>
+        </div>
+        {onOpenTranscriber && (
+          <button
+            type="button"
+            onClick={onOpenTranscriber}
+            className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
+          >
+            <Mic className="w-3.5 h-3.5 text-amber-300" />
+            <span>Speak to Fill Form</span>
+          </button>
+        )}
+      </div>
+
       {errorMsg && (
         <div className="mb-6 p-4 rounded-xl bg-red-50 border border-red-200 text-red-800 flex items-start gap-3">
           <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
@@ -204,13 +331,13 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
           <div>
             <h2 className="text-base font-semibold text-stone-900 flex items-center gap-2 pb-2 border-b border-stone-100">
               <User className="w-5 h-5 text-emerald-700" />
-              1. Farmer Identification & Contact
+              {t.sec1}
             </h2>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
               <div>
                 <label className="block text-xs font-semibold text-stone-700 mb-1">
-                  Farmer Full Name *
+                  {t.farmerName}
                 </label>
                 <div className="relative">
                   <input
@@ -271,13 +398,13 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
           <div>
             <h2 className="text-base font-semibold text-stone-900 flex items-center gap-2 pb-2 border-b border-stone-100">
               <Wheat className="w-5 h-5 text-amber-600" />
-              2. Crop Commodity & Yield Details
+              {t.sec2}
             </h2>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
               <div>
                 <label className="block text-xs font-semibold text-stone-700 mb-1">
-                  Select Commodity *
+                  {t.selectCrop}
                 </label>
                 <div className="grid grid-cols-3 gap-2">
                   {(['Wheat', 'Paddy', 'Mustard', 'Cotton', 'Maize', 'Soyabean'] as const).map((crop) => (
@@ -302,7 +429,7 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
 
               <div>
                 <label className="block text-xs font-semibold text-stone-700 mb-1">
-                  Estimated Quantity (Quintals) *
+                  {t.qty}
                 </label>
                 <div className="relative">
                   <Weight className="w-4 h-4 text-stone-400 absolute left-3 top-3" />
@@ -335,13 +462,13 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
           <div>
             <h2 className="text-base font-semibold text-stone-900 flex items-center gap-2 pb-2 border-b border-stone-100">
               <Truck className="w-5 h-5 text-emerald-700" />
-              3. Transport & Vehicle Details
+              {t.sec3}
             </h2>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
               <div>
                 <label className="block text-xs font-semibold text-stone-700 mb-1">
-                  Vehicle Type
+                  {t.vehicleType}
                 </label>
                 <select
                   value={vehicleType}
@@ -357,7 +484,7 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
 
               <div>
                 <label className="block text-xs font-semibold text-stone-700 mb-1">
-                  Vehicle Number Plate
+                  {t.plate}
                 </label>
                 <input
                   type="text"
@@ -376,7 +503,7 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
               <div>
                 <h2 className="text-base font-semibold text-emerald-950 flex items-center gap-2">
                   <Sparkles className="w-5 h-5 text-amber-600" />
-                  4. Predictive Slot Allocation Engine
+                  {t.sec4}
                 </h2>
                 <p className="text-xs text-stone-600 mt-0.5">
                   Dynamic algorithm analyzes mandi weighing scale capacity and shifts arrivals away from overloaded morning bottlenecks.
@@ -390,7 +517,7 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
               <div>
                 <label className="block text-xs font-semibold text-stone-700 mb-1">
-                  Procurement Date
+                  {t.procDate}
                 </label>
                 <div className="relative">
                   <Calendar className="w-4 h-4 text-stone-400 absolute left-3 top-3" />
@@ -406,7 +533,7 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
 
               <div>
                 <label className="block text-xs font-semibold text-stone-700 mb-1">
-                  Scheduling Mode
+                  {t.schedMode}
                 </label>
                 <select
                   value={slotPreference}
@@ -488,7 +615,7 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
               </>
             ) : (
               <>
-                Confirm Booking & Generate Gate Pass
+                {t.submitBtn}
                 <ArrowRight className="w-4 h-4 text-amber-300" />
               </>
             )}

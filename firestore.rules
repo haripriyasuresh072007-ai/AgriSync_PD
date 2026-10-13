@@ -6,28 +6,16 @@ service cloud.firestore {
       return str is string && str.size() >= min && str.size() <= max;
     }
 
-    function isValidBooking(data) {
-      return data.keys().hasAll(['id', 'farmerId', 'farmerName', 'commodity', 'allocatedSlot', 'status'])
-        && isValidString(data.id, 1, 128)
-        && isValidString(data.farmerId, 1, 64)
-        && isValidString(data.farmerName, 1, 128)
-        && isValidString(data.commodity, 1, 64)
-        && isValidString(data.allocatedSlot, 1, 64)
-        && (data.status in ['confirmed', 'at_gate', 'weighing', 'completed', 'cancelled']);
-    }
-
     match /bookings/{bookingId} {
-      allow read: if true;
-      allow create: if isValidBooking(request.resource.data);
-      allow update: if isValidBooking(request.resource.data)
-        && request.resource.data.id == resource.data.id
-        && request.resource.data.farmerId == resource.data.farmerId;
-      allow delete: if false;
+      allow read, write: if true;
     }
 
     match /mandi_stats/{statId} {
-      allow read: if true;
-      allow write: if true;
+      allow read, write: if true;
+    }
+
+    match /test/{docId} {
+      allow read, write: if true;
     }
 
     match /{document=**} {

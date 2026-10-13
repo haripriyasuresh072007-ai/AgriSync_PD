@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import QRCode from 'qrcode';
+import { QRCodeSVG, QRCodeCanvas } from 'qrcode.react';
 import {
   CheckCircle,
   Clock,
@@ -16,7 +16,13 @@ import {
   Sparkles,
   Smartphone,
   CreditCard,
-  ArrowRight
+  ArrowRight,
+  Eye,
+  Check,
+  Sliders,
+  ExternalLink,
+  Copy,
+  Info
 } from 'lucide-react';
 import { Booking } from '../types/procurement';
 import { updateBookingStatus } from '../services/bookingStore';
@@ -28,41 +34,83 @@ interface DigitalPassProps {
   onViewAdmin?: () => void;
 }
 
+type QrFormatType = 'pass_text' | 'web_url' | 'apmc_token';
+
 export const DigitalPass: React.FC<DigitalPassProps> = ({
   booking,
   onOpenGateScanner,
   onBookAnother,
   onViewAdmin,
 }) => {
-  const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const [copied, setCopied] = useState(false);
+  const [copiedUrl, setCopiedUrl] = useState(false);
   const [viewMode, setViewMode] = useState<'phone' | 'card'>('phone');
+  const [qrFormat, setQrFormat] = useState<QrFormatType>('pass_text');
+  const [highContrast, setHighContrast] = useState(true);
   const [isVerifyingGate, setIsVerifyingGate] = useState(false);
   const printableRef = useRef<HTMLDivElement>(null);
+  const downloadCanvasRef = useRef<HTMLCanvasElement>(null);
 
-  // Generate real QR code when booking changes
-  useEffect(() => {
-    if (!booking) return;
+  // Build the text that formats as a real Gate Pass when scanned with ANY mobile phone camera / Google Lens
+  const getGatePassTextPayload = (b: Booking): string => {
+    const slotShort = b.allocatedSlot.includes('02:00 PM') ? '2 PM' : b.allocatedSlot.split(' - ')[0];
+    return [
+      `🎫 APMC MANDI GATE ENTRY PASS`,
+      `Govt. of India • E-Procurement Portal`,
+      `───────────────────────────────`,
+      `PASS REF   : ${b.id}`,
+      `TOKEN NO   : #${b.tokenNumber} (Priority Gate 1)`,
+      `FARMER     : ${b.farmerName} (ID: ${b.farmerId})`,
+      `COMMODITY  : ${b.commodity} (${b.quantityQuintals} Quintals)`,
+      `SLOT TIME  : ${b.allocatedSlot} (${slotShort})`,
+      `VEHICLE    : ${b.vehicleNumber} (${b.vehicleType})`,
+      `MANDI      : ${b.mandiName}`,
+      `GATE ENTRY : APPROVED & ADMITTED ✅`,
+      `WAIT EST.  : ~${b.estimatedWaitMinutes || 12} mins (Fast-Track Lane)`,
+      `───────────────────────────────`,
+      `Official AgriSync Mandi Pass Verified`
+    ].join('\n');
+  };
 
-    const payload = booking.qrPayload || JSON.stringify({
-      id: booking.id,
-      farmerId: booking.farmerId,
-      commodity: booking.commodity,
-      slot: booking.allocatedSlot,
-      mandi: booking.mandiName,
+  // Build Web URL payload for direct browser linking
+  const getWebUrlPayload = (b: Booking): string => {
+    const origin = window.location.origin;
+    const pathname = window.location.pathname;
+    const params = new URLSearchParams({
+      passId: b.id,
+      fId: b.farmerId,
+      fName: b.farmerName,
+      comm: b.commodity,
+      slot: b.allocatedSlot,
+      qty: String(b.quantityQuintals),
+      veh: b.vehicleNumber,
+      vehType: b.vehicleType,
+      mandi: b.mandiName,
+      token: String(b.tokenNumber),
+      date: b.bookingDate,
+      status: b.status,
     });
+    return `${origin}${pathname}?${params.toString()}`;
+  };
 
-    QRCode.toDataURL(payload, {
-      width: 280,
-      margin: 1.5,
-      color: {
-        dark: '#064e3b', // Deep emerald
-        light: '#ffffff',
-      },
-    })
-      .then((url) => setQrDataUrl(url))
-      .catch((err) => console.error('Error generating QR code:', err));
-  }, [booking]);
+  // Build raw JSON token for gate security terminals
+  const getApmcTokenPayload = (b: Booking): string => {
+    return JSON.stringify({
+      app: 'AgriSync-APMC',
+      type: 'GATE_ENTRY_PASS',
+      id: b.id,
+      farmerId: b.farmerId,
+      farmerName: b.farmerName,
+      commodity: b.commodity,
+      quantityQtl: b.quantityQuintals,
+      vehicle: b.vehicleNumber,
+      slot: b.allocatedSlot,
+      token: b.tokenNumber,
+      mandi: b.mandiName,
+      verified: true,
+      timestamp: new Date().toISOString()
+    });
+  };
 
   if (!booking) {
     return (
@@ -84,15 +132,44 @@ export const DigitalPass: React.FC<DigitalPassProps> = ({
     );
   }
 
-  const handleShareSms = () => {
-    const text = `AgriSync Gate Pass: ID: ${booking.farmerId}, Slot: ${booking.allocatedSlot}, Commodity: ${booking.commodity}, Mandi: ${booking.mandiName}, Ref: ${booking.id}`;
-    navigator.clipboard?.writeText(text);
+  // Active payload based on user selection
+  const passTextPayload = getGatePassTextPayload(booking);
+  const webUrlPayload = getWebUrlPayload(booking);
+  const apmcTokenPayload = getApmcTokenPayload(booking);
+
+  let activeQrValue = passTextPayload;
+  if (qrFormat === 'web_url') activeQrValue = webUrlPayload;
+  if (qrFormat === 'apmc_token') activeQrValue = apmcTokenPayload;
+
+  // Colors for crisp scanning contrast
+  const fgColor = highContrast ? '#000000' : '#042f2e'; // Pure black or deep pine
+  const bgColor = '#ffffff';
+
+  const handleCopyPassText = () => {
+    navigator.clipboard?.writeText(passTextPayload);
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
   };
 
+  const handleCopyWebUrl = () => {
+    navigator.clipboard?.writeText(webUrlPayload);
+    setCopiedUrl(true);
+    setTimeout(() => setCopiedUrl(false), 2500);
+  };
+
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleDownloadQrPng = () => {
+    // Generate high resolution image from canvas
+    const canvas = document.getElementById('high-res-qr-canvas') as HTMLCanvasElement;
+    if (canvas) {
+      const link = document.createElement('a');
+      link.download = `APMC-GatePass-${booking.id}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    }
   };
 
   const handleSimulateGateCheckin = async () => {
@@ -107,29 +184,46 @@ export const DigitalPass: React.FC<DigitalPassProps> = ({
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
+    <div className="max-w-5xl mx-auto px-4 py-8">
+      {/* Hidden high-res canvas used for crystal-clear PNG export */}
+      <div className="hidden">
+        <QRCodeCanvas
+          id="high-res-qr-canvas"
+          value={activeQrValue}
+          size={800}
+          level="H"
+          includeMargin={true}
+          marginSize={4}
+          fgColor={fgColor}
+          bgColor={bgColor}
+        />
+      </div>
+
       {/* Header controls */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6">
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-xs font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
-              Digital Token Generated
+            <span className="text-xs font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-full border border-emerald-200">
+              Verified Digital Token #{booking.tokenNumber}
             </span>
             <span className="text-xs text-stone-500 font-mono">Ref: {booking.id}</span>
           </div>
-          <h1 className="text-2xl font-serif font-bold text-stone-900 mt-1">
-            Confirmed Gate Entry Pass
+          <h1 className="text-2xl sm:text-3xl font-serif font-bold text-stone-900 mt-1">
+            Official Gate Entry Pass
           </h1>
+          <p className="text-xs text-stone-600 mt-0.5">
+            High-Definition QR Code configured for instant smartphone camera scanning and APMC gate admission.
+          </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {/* View toggle */}
-          <div className="bg-stone-200 p-1 rounded-lg flex items-center text-xs">
+          <div className="bg-stone-200 p-1 rounded-xl flex items-center text-xs">
             <button
               onClick={() => setViewMode('phone')}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition-all cursor-pointer ${
                 viewMode === 'phone'
-                  ? 'bg-white text-stone-900 shadow-xs'
+                  ? 'bg-white text-stone-900 shadow-sm'
                   : 'text-stone-600 hover:text-stone-900'
               }`}
             >
@@ -138,35 +232,86 @@ export const DigitalPass: React.FC<DigitalPassProps> = ({
             </button>
             <button
               onClick={() => setViewMode('card')}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition-all cursor-pointer ${
                 viewMode === 'card'
-                  ? 'bg-white text-stone-900 shadow-xs'
+                  ? 'bg-white text-stone-900 shadow-sm'
                   : 'text-stone-600 hover:text-stone-900'
               }`}
             >
               <CreditCard className="w-3.5 h-3.5 text-amber-700" />
-              <span>Printable Pass</span>
+              <span>Printable Thermal Pass</span>
             </button>
           </div>
 
           <button
+            onClick={handleDownloadQrPng}
+            className="p-2 rounded-xl border border-stone-300 hover:bg-stone-100 text-stone-700 transition-colors flex items-center gap-1.5 text-xs font-medium cursor-pointer"
+            title="Download HD Pass QR"
+          >
+            <Download className="w-4 h-4 text-emerald-700" />
+            <span className="hidden sm:inline">Save HD QR</span>
+          </button>
+          <button
             onClick={handlePrint}
-            className="p-2 rounded-lg border border-stone-300 hover:bg-stone-100 text-stone-700 transition-colors"
+            className="p-2 rounded-xl border border-stone-300 hover:bg-stone-100 text-stone-700 transition-colors cursor-pointer"
             title="Print Pass"
           >
             <Printer className="w-4 h-4" />
           </button>
+        </div>
+      </div>
+
+      {/* Format Selector Banner: Ensures scanner displays pass directly */}
+      <div className="mb-6 p-3.5 bg-gradient-to-r from-emerald-50 via-stone-50 to-amber-50 rounded-2xl border border-emerald-200 flex flex-col md:flex-row items-center justify-between gap-3 text-xs shadow-xs">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
+            <QrCodeIcon className="w-4 h-4" />
+          </div>
+          <div>
+            <div className="font-bold text-stone-900">QR Code Output Mode</div>
+            <div className="text-[11px] text-stone-600">
+              {qrFormat === 'pass_text'
+                ? '⭐ Default: Point any phone camera at QR code — it immediately displays the full Gate Pass on your mobile screen!'
+                : qrFormat === 'web_url'
+                ? 'Web Link: Opens the interactive web portal on your mobile browser.'
+                : 'APMC Terminal: Encoded JSON payload for Mandi gate security scanner hardware.'}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1.5 bg-white p-1 rounded-xl border border-stone-200 shadow-xs">
           <button
-            onClick={handleShareSms}
-            className="p-2 rounded-lg border border-stone-300 hover:bg-stone-100 text-stone-700 transition-colors relative"
-            title="Copy SMS details"
+            type="button"
+            onClick={() => setQrFormat('pass_text')}
+            className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
+              qrFormat === 'pass_text'
+                ? 'bg-emerald-700 text-white shadow-xs'
+                : 'text-stone-600 hover:bg-stone-100'
+            }`}
           >
-            <Share2 className="w-4 h-4" />
-            {copied && (
-              <span className="absolute -top-7 right-0 bg-stone-900 text-white text-[10px] px-2 py-0.5 rounded shadow whitespace-nowrap">
-                Copied!
-              </span>
-            )}
+            📱 Mobile Pass View (Recommended)
+          </button>
+          <button
+            type="button"
+            onClick={() => setQrFormat('web_url')}
+            className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
+              qrFormat === 'web_url'
+                ? 'bg-emerald-700 text-white shadow-xs'
+                : 'text-stone-600 hover:bg-stone-100'
+            }`}
+          >
+            🌐 Web Link
+          </button>
+          <button
+            type="button"
+            onClick={() => setQrFormat('apmc_token')}
+            className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
+              qrFormat === 'apmc_token'
+                ? 'bg-emerald-700 text-white shadow-xs'
+                : 'text-stone-600 hover:bg-stone-100'
+            }`}
+          >
+            🏢 APMC Terminal
           </button>
         </div>
       </div>
@@ -178,14 +323,14 @@ export const DigitalPass: React.FC<DigitalPassProps> = ({
           ref={printableRef}
           className={`transition-all duration-300 ${
             viewMode === 'phone'
-              ? 'w-full max-w-[360px] rounded-[44px] p-3.5 bg-stone-900 shadow-2xl ring-12 ring-stone-800/80 border-4 border-stone-700'
+              ? 'w-full max-w-[370px] rounded-[48px] p-3.5 bg-stone-900 shadow-2xl ring-12 ring-stone-800/80 border-4 border-stone-700'
               : 'w-full max-w-md rounded-2xl bg-white shadow-xl border border-stone-200'
           }`}
         >
           {/* Inner Phone Screen */}
           <div
             className={`bg-white overflow-hidden text-stone-900 ${
-              viewMode === 'phone' ? 'rounded-[36px] min-h-[580px] flex flex-col justify-between' : 'rounded-2xl p-6'
+              viewMode === 'phone' ? 'rounded-[40px] min-h-[620px] flex flex-col justify-between' : 'rounded-2xl p-6'
             }`}
           >
             {/* Phone Notch & Status bar */}
@@ -202,38 +347,69 @@ export const DigitalPass: React.FC<DigitalPassProps> = ({
 
             {/* Pass Content matching Slide 7 EXACTLY */}
             <div className={viewMode === 'phone' ? 'px-6 py-4 text-center' : 'text-center'}>
-              {/* Header Title: "Gate Entry Pass" */}
+              {/* Official Header */}
+              <div className="inline-block px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase tracking-wider mb-1">
+                E-Procurement Gate Pass
+              </div>
               <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-stone-950 font-serif">
                 Gate Entry Pass
               </h2>
-              <p className="text-[11px] text-stone-500 font-medium mt-0.5">
+              <p className="text-[11px] text-stone-500 font-medium">
                 {booking.mandiName}
               </p>
 
-              {/* QR Code Container */}
-              <div className="my-4 flex flex-col items-center justify-center">
-                <div className="p-3 bg-white rounded-2xl border-2 border-stone-200 shadow-sm relative group">
-                  {qrDataUrl ? (
-                    <img
-                      src={qrDataUrl}
-                      alt="Gate Entry QR Code"
-                      className="w-48 h-48 sm:w-52 sm:h-52 object-contain mx-auto"
+              {/* High-Definition QR Code Container with High Contrast and Scaling */}
+              <div className="my-3 flex flex-col items-center justify-center">
+                <div className="w-full max-w-[260px] p-4 bg-white rounded-2xl border-2 border-stone-300 shadow-sm relative group transition-all hover:border-emerald-500">
+                  {/* High Definition SVG QR Code */}
+                  <div className="flex items-center justify-center">
+                    <QRCodeSVG
+                      value={activeQrValue}
+                      size={220}
+                      level="H"
+                      includeMargin={true}
+                      marginSize={3}
+                      fgColor={fgColor}
+                      bgColor={bgColor}
+                      className="w-full h-auto aspect-square max-w-[210px] max-h-[210px] mx-auto select-none"
                     />
-                  ) : (
-                    <div className="w-48 h-48 bg-stone-100 flex items-center justify-center text-stone-400">
-                      <QrCodeIcon className="w-12 h-12 animate-pulse" />
-                    </div>
-                  )}
+                  </div>
 
-                  {/* Corner scan anchors */}
-                  <div className="absolute top-1 left-1 w-4 h-4 border-t-2 border-l-2 border-emerald-600"></div>
-                  <div className="absolute top-1 right-1 w-4 h-4 border-t-2 border-r-2 border-emerald-600"></div>
-                  <div className="absolute bottom-1 left-1 w-4 h-4 border-b-2 border-l-2 border-emerald-600"></div>
-                  <div className="absolute bottom-1 right-1 w-4 h-4 border-b-2 border-r-2 border-emerald-600"></div>
+                  {/* Corner optical scan alignment reticles */}
+                  <div className="absolute top-1.5 left-1.5 w-4 h-4 border-t-2 border-l-2 border-emerald-700"></div>
+                  <div className="absolute top-1.5 right-1.5 w-4 h-4 border-t-2 border-r-2 border-emerald-700"></div>
+                  <div className="absolute bottom-1.5 left-1.5 w-4 h-4 border-b-2 border-l-2 border-emerald-700"></div>
+                  <div className="absolute bottom-1.5 right-1.5 w-4 h-4 border-b-2 border-r-2 border-emerald-700"></div>
                 </div>
-                <span className="text-[10px] text-stone-400 mt-1 uppercase tracking-wider font-mono">
-                  Scan at APMC Weighbridge Gate
-                </span>
+
+                {/* Subtitle instructions for mobile scanners */}
+                <div className="mt-2.5 flex flex-col items-center gap-1 w-full">
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-800 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200 shadow-2xs">
+                    <Smartphone className="w-3.5 h-3.5 text-emerald-600" />
+                    Scan with any phone camera to view pass
+                  </span>
+
+                  <div className="flex items-center gap-2 mt-1">
+                    <button
+                      type="button"
+                      onClick={handleCopyPassText}
+                      className="text-[10px] text-stone-600 hover:text-emerald-700 underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <Copy className="w-2.5 h-2.5" />
+                      {copied ? 'Pass text copied!' : 'Copy Pass Text'}
+                    </button>
+                    <span className="text-stone-300">•</span>
+                    <button
+                      type="button"
+                      onClick={() => setHighContrast(!highContrast)}
+                      className="text-[10px] text-stone-500 hover:text-stone-900 flex items-center gap-1 cursor-pointer"
+                      title="Toggle contrast"
+                    >
+                      <Sliders className="w-2.5 h-2.5" />
+                      {highContrast ? 'Pure Black' : 'Pine Theme'}
+                    </button>
+                  </div>
+                </div>
               </div>
 
               {/* Exact Fields from Slide 7:
@@ -241,23 +417,23 @@ export const DigitalPass: React.FC<DigitalPassProps> = ({
                   Slot: 2 PM
                   Commodity: Wheat
               */}
-              <div className="space-y-2.5 text-left bg-stone-50 p-4 rounded-xl border border-stone-200 font-sans">
-                <div className="flex justify-between items-center text-sm">
+              <div className="space-y-2 text-left bg-stone-50 p-3.5 rounded-xl border border-stone-200 font-sans text-xs">
+                <div className="flex justify-between items-center">
                   <span className="text-stone-500 font-medium">Farmer ID:</span>
                   <span className="font-bold font-mono text-stone-900 bg-white px-2 py-0.5 rounded border border-stone-200">
                     {booking.farmerId}
                   </span>
                 </div>
 
-                <div className="flex justify-between items-center text-sm">
+                <div className="flex justify-between items-center">
                   <span className="text-stone-500 font-medium">Slot:</span>
                   <span className="font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
                     {booking.allocatedSlot.includes('02:00 PM') ? '2 PM' : booking.allocatedSlot.split(' - ')[0]}
-                    <span className="text-stone-400 text-xs ml-1 font-normal">({booking.allocatedSlot})</span>
+                    <span className="text-stone-400 text-[10px] ml-1 font-normal">({booking.allocatedSlot})</span>
                   </span>
                 </div>
 
-                <div className="flex justify-between items-center text-sm">
+                <div className="flex justify-between items-center">
                   <span className="text-stone-500 font-medium">Commodity:</span>
                   <span className="font-bold text-amber-900 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 flex items-center gap-1">
                     <Wheat className="w-3.5 h-3.5 text-amber-700" />
@@ -265,7 +441,7 @@ export const DigitalPass: React.FC<DigitalPassProps> = ({
                   </span>
                 </div>
 
-                <div className="pt-2 border-t border-stone-200 flex justify-between items-center text-xs text-stone-600">
+                <div className="pt-2 border-t border-stone-200 flex justify-between items-center text-[11px] text-stone-600">
                   <span>Quantity & Vehicle:</span>
                   <span className="font-semibold text-stone-900">
                     {booking.quantityQuintals} Quintals • {booking.vehicleNumber}
@@ -274,14 +450,14 @@ export const DigitalPass: React.FC<DigitalPassProps> = ({
               </div>
 
               {/* Status and Big Green Checkmark matching Slide 7 */}
-              <div className="mt-4 flex flex-col items-center justify-center pb-2">
-                <div className="w-12 h-12 rounded-full bg-emerald-600 text-white flex items-center justify-center shadow-lg shadow-emerald-600/30">
-                  <CheckCircle className="w-7 h-7 stroke-[2.5]" />
+              <div className="mt-3 flex flex-col items-center justify-center pb-1">
+                <div className="w-11 h-11 rounded-full bg-emerald-600 text-white flex items-center justify-center shadow-lg shadow-emerald-600/30">
+                  <CheckCircle className="w-6 h-6 stroke-[2.5]" />
                 </div>
                 <span className="text-xs font-bold text-emerald-800 mt-1 uppercase tracking-wide">
                   Verified Gate Access
                 </span>
-                <span className="text-[11px] text-stone-500">
+                <span className="text-[10px] text-stone-500">
                   Est. physical wait time: ~12-15 minutes
                 </span>
               </div>
@@ -290,39 +466,102 @@ export const DigitalPass: React.FC<DigitalPassProps> = ({
             {/* Bottom bar of phone */}
             {viewMode === 'phone' && (
               <div className="pb-2 pt-1 text-center">
-                <div className="w-32 h-1 bg-stone-300 rounded-full mx-auto"></div>
+                <div className="w-28 h-1 bg-stone-300 rounded-full mx-auto"></div>
               </div>
             )}
           </div>
         </div>
 
-        {/* Side Panel: Information, Physical gate verification simulator & Actions */}
+        {/* Side Panel: Live Mobile Scanner View & Actions */}
         <div className="max-w-md w-full space-y-4">
-          <div className="bg-white rounded-2xl p-6 border border-stone-200 shadow-sm">
-            <h3 className="font-bold text-stone-900 flex items-center gap-2 text-base">
+          {/* Live Mobile Camera Scanner Simulation: Shows what phone displays! */}
+          <div className="bg-white rounded-2xl p-5 border border-stone-200 shadow-sm">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-stone-900 flex items-center gap-2 text-sm">
+                <Eye className="w-4 h-4 text-emerald-700" />
+                Live Mobile Camera View Preview
+              </h3>
+              <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
+                Phone Viewport
+              </span>
+            </div>
+            <p className="text-[11px] text-stone-500 mt-1">
+              When a farmer or gate officer points their smartphone camera at the QR code above, their screen automatically displays this verified Gate Pass:
+            </p>
+
+            {/* Simulated smartphone camera banner */}
+            <div className="mt-3 bg-stone-900 text-stone-100 rounded-xl p-3.5 font-mono text-[11px] border border-stone-800 shadow-inner relative overflow-hidden">
+              <div className="flex items-center justify-between pb-2 border-b border-stone-800 text-[10px] text-stone-400">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div>
+                  <span>CAMERA QR RECOGNITION</span>
+                </div>
+                <span className="text-emerald-400 font-sans font-bold">100% MATCH</span>
+              </div>
+              <div className="mt-2 text-stone-200 whitespace-pre-line leading-relaxed text-[10.5px]">
+                {qrFormat === 'pass_text' ? (
+                  passTextPayload
+                ) : qrFormat === 'web_url' ? (
+                  <div>
+                    <div className="text-emerald-400 font-bold mb-1">🌐 Web Link Detected:</div>
+                    <div className="break-all text-[10px] text-stone-300">{webUrlPayload}</div>
+                  </div>
+                ) : (
+                  <div>
+                    <div className="text-amber-400 font-bold mb-1">🏢 APMC JSON Token:</div>
+                    <div className="break-all text-[10px] text-stone-300">{apmcTokenPayload}</div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Quick action to test scanning inside app */}
+            <div className="mt-3 flex items-center justify-between text-xs">
+              <button
+                type="button"
+                onClick={onOpenGateScanner}
+                className="text-emerald-700 font-bold hover:underline flex items-center gap-1 cursor-pointer"
+              >
+                <ShieldCheck className="w-3.5 h-3.5" />
+                Test in Mandi Gate Scanner Modal
+              </button>
+              <button
+                type="button"
+                onClick={handleCopyWebUrl}
+                className="text-stone-500 hover:text-stone-900 flex items-center gap-1 cursor-pointer"
+              >
+                <ExternalLink className="w-3 h-3" />
+                {copiedUrl ? 'Link Copied!' : 'Copy Direct Web Link'}
+              </button>
+            </div>
+          </div>
+
+          {/* Dynamic Scheduling Highlights */}
+          <div className="bg-white rounded-2xl p-5 border border-stone-200 shadow-sm">
+            <h3 className="font-bold text-stone-900 flex items-center gap-2 text-sm">
               <Sparkles className="w-4 h-4 text-amber-600" />
               Dynamic Scheduling Highlights
             </h3>
 
-            <div className="mt-3 space-y-3 text-xs text-stone-700">
+            <div className="mt-3 space-y-2.5 text-xs text-stone-700">
               <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200">
-                <span className="font-bold text-emerald-900 block text-sm">
+                <span className="font-bold text-emerald-900 block text-xs">
                   Morning Rush Successfully Bypassed
                 </span>
-                <p className="mt-1 text-emerald-800">
-                  The predictive algorithm intelligently scheduled your arrival for{' '}
-                  <strong>{booking.allocatedSlot}</strong>, flattening the mandi morning bottleneck and cutting wait time from 48 hours to 15 minutes.
+                <p className="mt-1 text-emerald-800 text-[11px] leading-relaxed">
+                  The predictive algorithm intelligently scheduled arrival for{' '}
+                  <strong>{booking.allocatedSlot}</strong>, flattening the mandi morning bottleneck and cutting physical queue wait time from 48 hours to 15 minutes.
                 </p>
               </div>
 
               <div className="grid grid-cols-2 gap-2 text-center">
-                <div className="p-2.5 rounded-lg bg-stone-50 border border-stone-200">
+                <div className="p-2 rounded-lg bg-stone-50 border border-stone-200">
                   <span className="text-[10px] text-stone-500 block">Current Status</span>
                   <span className="font-bold text-emerald-800 uppercase text-xs">
                     {booking.status.replace('_', ' ')}
                   </span>
                 </div>
-                <div className="p-2.5 rounded-lg bg-stone-50 border border-stone-200">
+                <div className="p-2 rounded-lg bg-stone-50 border border-stone-200">
                   <span className="text-[10px] text-stone-500 block">Token Sequence</span>
                   <span className="font-bold text-stone-900 text-xs">#{booking.tokenNumber}</span>
                 </div>
@@ -330,11 +569,7 @@ export const DigitalPass: React.FC<DigitalPassProps> = ({
             </div>
 
             {/* Live Gate Verification action */}
-            <div className="mt-5 pt-4 border-t border-stone-100">
-              <span className="text-xs font-semibold text-stone-700 block mb-2">
-                Simulate Physical-to-Digital Bridge (Slide 5 & 7):
-              </span>
-              
+            <div className="mt-4 pt-3 border-t border-stone-100">
               {booking.status === 'confirmed' ? (
                 <button
                   onClick={handleSimulateGateCheckin}
@@ -342,7 +577,7 @@ export const DigitalPass: React.FC<DigitalPassProps> = ({
                   className="w-full py-2.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-600 text-stone-950 font-bold text-xs shadow transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                 >
                   {isVerifyingGate ? (
-                    'Scanning at Gate...'
+                    'Admitting at Gate...'
                   ) : (
                     <>
                       <ShieldCheck className="w-4 h-4" />

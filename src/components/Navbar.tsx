@@ -1,13 +1,14 @@
 import React from 'react';
-import { Sprout, LayoutDashboard, Ticket, MessageSquare, ShieldCheck, Languages } from 'lucide-react';
+import { Sprout, LayoutDashboard, Ticket, MessageSquare, ShieldCheck, Languages, Mic } from 'lucide-react';
 
 interface NavbarProps {
   currentTab: 'farmer' | 'pass' | 'admin' | 'sms';
   setCurrentTab: (tab: 'farmer' | 'pass' | 'admin' | 'sms') => void;
   hasActivePass: boolean;
-  language: 'en' | 'hi' | 'pa';
-  setLanguage: (lang: 'en' | 'hi' | 'pa') => void;
+  language: 'en' | 'hi' | 'pa' | 'ta';
+  setLanguage: (lang: 'en' | 'hi' | 'pa' | 'ta') => void;
   onOpenReport?: () => void;
+  onOpenTranscriber?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -17,6 +18,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   language,
   setLanguage,
   onOpenReport,
+  onOpenTranscriber,
 }) => {
   const translations = {
     en: {
@@ -42,6 +44,14 @@ export const Navbar: React.FC<NavbarProps> = ({
       adminTab: "ਮੰਡੀ ਐਡਮਿਨ ਡੈਸ਼ਬੋਰਡ",
       smsTab: "ਐਸਐਮਐਸ ਸਿਮੂਲੇਟਰ",
       badge: "ਐਸਆਈਐਚ 2026 | ਸਮਾਰਟ ਖੇਤੀ",
+    },
+    ta: {
+      tagline: "விவசாயியின் நேரத்தை மதித்து, விளைச்சலைப் பாதுகாப்போம்.",
+      farmerTab: "விவசாயி போர்டல்",
+      passTab: "நுழைவு அனுமதி அட்டை",
+      adminTab: "நிர்வாக டாஷ்போர்டு",
+      smsTab: "எஸ்.எம்.எஸ் சிமுலேட்டர்",
+      badge: "எஸ்.ஐ.எச் 2026 | ஸ்மார்ட் விவசாயம்",
     },
   }[language];
 
@@ -82,6 +92,12 @@ export const Navbar: React.FC<NavbarProps> = ({
               className={`px-1 rounded text-[11px] transition-colors ${language === 'pa' ? 'bg-amber-400 text-stone-900 font-bold' : 'text-emerald-200 hover:text-white'}`}
             >
               ਪੰਜਾਬੀ
+            </button>
+            <button
+              onClick={() => setLanguage('ta')}
+              className={`px-1 rounded text-[11px] transition-colors ${language === 'ta' ? 'bg-amber-400 text-stone-900 font-bold' : 'text-emerald-200 hover:text-white'}`}
+            >
+              தமிழ்
             </button>
           </div>
         </div>
@@ -165,6 +181,18 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span className="hidden sm:inline">{translations.smsTab}</span>
               <span className="sm:hidden">SMS</span>
             </button>
+
+            {onOpenTranscriber && (
+              <button
+                onClick={onOpenTranscriber}
+                className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-sm font-semibold transition-all bg-gradient-to-r from-emerald-600 to-emerald-700 text-white shadow-xs hover:from-emerald-700 hover:to-emerald-800 cursor-pointer"
+                title="Transcribe audio with gemini-3.5-transcribe"
+              >
+                <Mic className="w-4 h-4 text-amber-300 animate-pulse" />
+                <span className="hidden md:inline">Transcribe Voice</span>
+                <span className="md:hidden">Voice</span>
+              </button>
+            )}
 
             {onOpenReport && (
               <button

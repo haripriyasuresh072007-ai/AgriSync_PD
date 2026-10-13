@@ -12,6 +12,7 @@ import { GateScannerModal } from './components/GateScannerModal';
 import { WeighingBridgeModal } from './components/WeighingBridgeModal';
 import { SmsSimulatorModal } from './components/SmsSimulatorModal';
 import { ProjectReportModal } from './components/ProjectReportModal';
+import { AudioTranscriberModal } from './components/AudioTranscriberModal';
 import {
   Booking,
   MandiDayArrival,
@@ -23,23 +24,86 @@ import {
   DEFAULT_QUEUE_TREND,
   seedInitialBookingsIfEmpty,
   subscribeToBookings,
+  getLocalBookings,
+  saveBooking,
 } from './services/bookingStore';
+import { TranscriptionResult } from './services/transcriptionService';
 import { testConnection } from './firebase';
-import { Sprout, ShieldCheck, Cpu, ArrowRight } from 'lucide-react';
+import { Sprout, ShieldCheck, Cpu, ArrowRight, Smartphone } from 'lucide-react';
 
 export default function App() {
   const [currentTab, setCurrentTab] = useState<'farmer' | 'pass' | 'admin' | 'sms'>('farmer');
-  const [bookings, setBookings] = useState<Booking[]>(SEED_BOOKINGS);
-  const [activePassBooking, setActivePassBooking] = useState<Booking | null>(
-    SEED_BOOKINGS.find((b) => b.farmerId === '12345') || SEED_BOOKINGS[0]
-  );
-  const [language, setLanguage] = useState<'en' | 'hi' | 'pa'>('en');
+  const [bookings, setBookings] = useState<Booking[]>(() => getLocalBookings());
+  const [activePassBooking, setActivePassBooking] = useState<Booking | null>(() => {
+    const list = getLocalBookings();
+    return list.find((b) => b.farmerId === '12345') || list[0] || null;
+  });
+  const [language, setLanguage] = useState<'en' | 'hi' | 'pa' | 'ta'>('en');
+  const [isMobileScannedPass, setIsMobileScannedPass] = useState(false);
 
   // Modals
   const [isGateScannerOpen, setIsGateScannerOpen] = useState(false);
   const [weighbridgeBooking, setWeighbridgeBooking] = useState<Booking | null>(null);
   const [isSmsOpen, setIsSmsOpen] = useState(false);
   const [isReportOpen, setIsReportOpen] = useState(false);
+  const [isTranscriberOpen, setIsTranscriberOpen] = useState(false);
+  const [voiceAutofillData, setVoiceAutofillData] = useState<TranscriptionResult['parsedFields'] | null>(null);
+
+  // Handle URL parameters (e.g. when farmer scans QR code on phone)
+  useEffect(() => {
+    const handleUrlParams = () => {
+      const searchParams = new URLSearchParams(window.location.search);
+      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+      const passId = searchParams.get('passId') || searchParams.get('id') || hashParams.get('passId');
+
+      if (passId) {
+        setIsMobileScannedPass(true);
+        const currentList = getLocalBookings();
+        const existing = currentList.find((b) => b.id === passId || b.farmerId === passId);
+
+        if (existing) {
+          setActivePassBooking(existing);
+          setCurrentTab('pass');
+        } else {
+          // Reconstruct pass data from URL parameters
+          const reconstructedBooking: Booking = {
+            id: passId,
+            farmerId: searchParams.get('fId') || searchParams.get('farmerId') || '12345',
+            farmerName: searchParams.get('fName') || searchParams.get('farmerName') || 'Balwant Singh',
+            phone: searchParams.get('phone') || '+91 98765 43210',
+            commodity: (searchParams.get('comm') || searchParams.get('commodity') || 'Wheat') as any,
+            quantityQuintals: Number(searchParams.get('qty') || 45),
+            vehicleNumber: searchParams.get('veh') || 'HR-05-AR-2291',
+            vehicleType: (searchParams.get('vehType') || 'Tractor Trolley') as any,
+            bookingDate: searchParams.get('date') || new Date().toISOString().split('T')[0],
+            allocatedSlot: searchParams.get('slot') || '02:00 PM - 02:30 PM',
+            allocatedHour: 14.0,
+            mandiName: searchParams.get('mandi') || 'APMC Karnal Grain Mandi (Terminal-01)',
+            channel: 'web_portal',
+            status: (searchParams.get('status') as any) || 'confirmed',
+            tokenNumber: Number(searchParams.get('token') || 101),
+            estimatedWaitMinutes: 12,
+            qrPayload: window.location.href,
+            bypassMorningRushNote: 'System intelligently allocated a 2 PM slot to bypass morning rush.',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+
+          setActivePassBooking(reconstructedBooking);
+          setBookings((prev) => {
+            if (prev.some((b) => b.id === reconstructedBooking.id)) return prev;
+            return [reconstructedBooking, ...prev];
+          });
+          saveBooking(reconstructedBooking);
+          setCurrentTab('pass');
+        }
+      }
+    };
+
+    handleUrlParams();
+    window.addEventListener('popstate', handleUrlParams);
+    return () => window.removeEventListener('popstate', handleUrlParams);
+  }, []);
 
   // Initialize Firebase connection and data subscription
   useEffect(() => {
@@ -87,7 +151,37 @@ export default function App() {
         language={language}
         setLanguage={setLanguage}
         onOpenReport={() => setIsReportOpen(true)}
+        onOpenTranscriber={() => setIsTranscriberOpen(true)}
       />
+
+      {/* Mobile QR Scan Notification Banner */}
+      {isMobileScannedPass && (
+        <div className="bg-gradient-to-r from-emerald-800 via-emerald-700 to-amber-800 text-white px-4 py-2.5 text-xs shadow-md border-b border-emerald-600/40 animate-in slide-in-from-top duration-200">
+          <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
+              <Smartphone className="w-4 h-4 text-amber-300" />
+              <span className="font-bold">
+                Official Gate Entry Pass Opened via Mobile QR Scan
+              </span>
+              <span className="hidden sm:inline text-emerald-100">
+                • Verified APMC Mandi Security Token #{activePassBooking?.tokenNumber || '101'}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  setIsMobileScannedPass(false);
+                  window.history.replaceState({}, document.title, window.location.pathname);
+                }}
+                className="text-emerald-100 hover:text-white underline cursor-pointer text-[11px] font-medium"
+              >
+                Dismiss Notice
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Views */}
       <main className="flex-1">
@@ -96,6 +190,8 @@ export default function App() {
             existingBookings={bookings}
             onBookingSuccess={handleBookingSuccess}
             language={language}
+            onOpenTranscriber={() => setIsTranscriberOpen(true)}
+            voiceAutofillFields={voiceAutofillData}
           />
         )}
 
@@ -154,6 +250,18 @@ export default function App() {
         isOpen={isReportOpen}
         onClose={() => setIsReportOpen(false)}
       />
+
+      {isTranscriberOpen && (
+        <AudioTranscriberModal
+          isOpen={isTranscriberOpen}
+          onClose={() => setIsTranscriberOpen(false)}
+          language={language}
+          onApplyFields={(fields) => {
+            setVoiceAutofillData(fields);
+            setCurrentTab('farmer');
+          }}
+        />
+      )}
 
       {/* Footer matching Slide 1 & 10 */}
       <footer className="bg-white border-t border-stone-200 mt-12 py-8 text-xs text-stone-500">
